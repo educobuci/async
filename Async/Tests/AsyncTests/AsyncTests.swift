@@ -16,7 +16,7 @@ final class AsyncTests: QuickSpec {
                             expect(response) == "url_url2"
                             done()
                         }
-                        .resume()a
+                        .resume()
                 }
                 
             }
