@@ -1,70 +1,51 @@
 import Quick
 import Nimble
 import Foundation
+
 @testable import Async
 
 final class AsyncTests: QuickSpec {
     override func spec() {
         describe("async") {
-            it("should work") {
+            it("should wrap a single async call and pass the result to done") {
                 waitUntil { done in
-                    Async { get(url: "url", completion: $0) }
-                        .then { response, next in
-                            get(url: "\(response!)_url2", completion: next)
-                        }
-                        .then { response, next in
-                            expect(response) == "url_url2"
+                    let _ = Async { rng(completion: $0) }
+                        .done {
+                            expect($0) == 3
                             done()
                         }
-                        .resume()
                 }
-                
             }
-        }
-    }
-}
-
-typealias AsyncResult = (Result<String, Error>) -> Void
-func get(url: String, completion: AsyncResult) {
-    completion(.success(url))
-}
-
-class Async {
-    var block: ((String?, AsyncResult) -> Void)
-    var state: String? = nil
-    
-    init(block: @escaping (AsyncResult) -> Void) {
-        self.block = { (_, result) in
-            block(result)
-        }
-    }
-    
-    init(block: @escaping (String?, AsyncResult) -> Void) {
-        self.block = block
-    }
-    
-    func then(next: @escaping (String?, AsyncResult) -> Void) -> Async {
-        let semaphore = DispatchSemaphore(value: 0)
-        var async: Async?
-        let queue = DispatchQueue.global()
-        queue.async {
-            self.block(self.state) { result in
-                switch result {
-                case .success(let newState):
-                    async = Async(block: next)
-                    async?.state = newState
-                    semaphore.signal()
-                default:
-                    print("Error")
+            it("should wrap any number of async calls and pass the result to done") {
+                waitUntil { done in
+                    let _ = Async { foward(text: "text", completion: $0) }
+                        .then { foward(text: "\($0)1", completion: $1) }
+                        .then { foward(text: "\($0)2", completion: $1) }
+                        .done {
+                            expect($0) == "text12"
+                            done()
+                        }
+                }
+            }
+            it("should allow map transformation") {
+                waitUntil { done in
+                    let _ = Async { foward(text: "text", completion: $0) }
+                        .map {
+                            rng(completion: $0 { ["key": "\($0)\($1)"] })
+                        }.done {
+                            expect($0["key"]) == "text3"
+                            done()
+                        }
                 }
             }
         }
-        semaphore.wait()
-        return async!
-    }
-    
-    func resume() {
-        self.block(self.state) { result in
+        
+        func foward(text: String, completion: AsyncResult<String>) {
+            completion(.success(text))
+        }
+
+        func rng(completion: AsyncResult<Int>) {
+            completion(.success(3)) // Totally random
         }
     }
 }
